@@ -6,3 +6,6 @@
 **/modules.order
 **/Module.symvers
 **/__pycache__/
+**/venv/
+
+neuro-swap/utest
