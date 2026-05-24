@@ -19,7 +19,6 @@ static int __init telegram_init(void)
 {
     int i, ret;
 
-    /* -- chat devices -- */
     ret = alloc_chrdev_region(&chats_dev, 0, MAX_CHATS, DEVICE_NAME);
     if (ret < 0) {
         return ret;
@@ -52,7 +51,6 @@ static int __init telegram_init(void)
     }
     pr_info("telegram: device initialized\n");
 
-    /* -- bus devices -- */
     mutex_init(&tg_bus.lock);
     init_waitqueue_head(&tg_bus.waitq);
 

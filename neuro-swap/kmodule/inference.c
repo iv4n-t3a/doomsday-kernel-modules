@@ -1,26 +1,18 @@
-#include <math.h>
-#include <stdio.h>
-#include <string.h>
-
 #include "inference.h"
+#include "math.h"
 #include "weights.h"
 
-static float sigmoid(float x) { return 1.0f / (1.0f + expf(-x)); }
+#if __KERNEL__
+#include <asm/fpu/api.h>
+#include <linux/math.h>
+#include <linux/math64.h>
+#include <linux/string.h>
+#else
+#include <stdio.h>
+#include <string.h>
+#endif
 
-static void matvec(float *out, const float *A, const float *x, int m, int n) {
-  for (int i = 0; i < m; i++) {
-    out[i] = 0.0f;
-    for (int j = 0; j < n; j++)
-      out[i] += A[i * n + j] * x[j];
-  }
-}
-
-static void vec_add(float *out, const float *v, int n) {
-  for (int i = 0; i < n; i++)
-    out[i] += v[i];
-}
-
-void lstm_step(LSTMState *s, const float *x, float *y) {
+TARGET_SSE static void lstm_step(LSTMState *s, const float *x, float *y) {
   float tmp[HIDDEN_SIZE];
   float gi[HIDDEN_SIZE], gf[HIDDEN_SIZE], gg[HIDDEN_SIZE], go[HIDDEN_SIZE];
 
@@ -43,7 +35,7 @@ void lstm_step(LSTMState *s, const float *x, float *y) {
   vec_add(gg, tmp, HIDDEN_SIZE);
   vec_add(gg, lstmw_bg, HIDDEN_SIZE);
   for (int i = 0; i < HIDDEN_SIZE; i++)
-    gg[i] = tanhf(gg[i]);
+    gg[i] = ktanhf(gg[i]);
 
   matvec(go, lstmw_Wo, x, HIDDEN_SIZE, INPUT_SIZE);
   matvec(tmp, lstmw_Uo, s->h, HIDDEN_SIZE, HIDDEN_SIZE);
@@ -54,7 +46,8 @@ void lstm_step(LSTMState *s, const float *x, float *y) {
 
   for (int i = 0; i < HIDDEN_SIZE; i++) {
     s->c[i] = gf[i] * s->c[i] + gi[i] * gg[i];
-    s->h[i] = go[i] * tanhf(s->c[i]);
+    float kernel_tanhfv = ktanhf(s->c[i]);
+    s->h[i] = go[i] * kernel_tanhfv;
   }
 
   if (y != NULL) {
@@ -63,31 +56,42 @@ void lstm_step(LSTMState *s, const float *x, float *y) {
   }
 }
 
-static void lstm_state_reset(LSTMState *s) { memset(s, 0, sizeof(LSTMState)); }
-
-static void lstm_state_copy(LSTMState *dst, const LSTMState *src) {
-  memcpy(dst, src, sizeof(LSTMState));
-}
-
-LSTMState lstm_memorize(const uint8_t *seq, int len) {
-  LSTMState state;
-  lstm_state_reset(&state);
-
+TARGET_SSE static void lstm_memorize_sse(LSTMState *state, const uint8_t *seq,
+                                         int len) {
   for (int t = 0; t < len; t++) {
-    float in[] = { (float)seq[t] / 255.0f };
-    lstm_step(&state, in, NULL);
+    float in[] = {(float)seq[t] / 255.0f};
+    lstm_step(state, in, NULL);
   }
-
-  return state;
 }
 
-void lstm_recall(LSTMState state, uint8_t *seq, int len) {
-  LSTMState saved = state;
-
+TARGET_SSE static void lstm_recall_sse(LSTMState *state, uint8_t *seq,
+                                       int len) {
   float zero[INPUT_SIZE] = {0.0f};
   for (int t = 0; t < len; t++) {
     float out[OUTPUT_SIZE];
-    lstm_step(&saved, zero, out);
+    lstm_step(state, zero, out);
     seq[t] = out[0] * 255.0f;
   }
+}
+
+void lstm_state_reset(LSTMState *s) { memset(s, 0, sizeof(LSTMState)); }
+
+void lstm_state_copy(LSTMState *dst, const LSTMState *src) {
+  memcpy(dst, src, sizeof(LSTMState));
+}
+
+void lstm_memorize(LSTMState *state, const uint8_t *seq, int len) {
+  KERNEL_FPU_BEGIN;
+
+  lstm_memorize_sse(state, seq, len);
+
+  KERNEL_FPU_END;
+}
+
+void lstm_recall(LSTMState *state, uint8_t *seq, int len) {
+  KERNEL_FPU_BEGIN;
+
+  lstm_recall_sse(state, seq, len);
+
+  KERNEL_FPU_END;
 }
