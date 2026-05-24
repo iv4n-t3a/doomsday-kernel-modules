@@ -7,5 +7,6 @@
 **/Module.symvers
 **/__pycache__/
 **/venv/
+**/build/
 
 neuro-swap/utest

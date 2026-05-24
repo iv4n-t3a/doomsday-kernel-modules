@@ -1,0 +1,17 @@
+#ifndef BUILDCONFIG_H
+#define BUILDCONFIG_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#define PAGE_SIZE 4096
+
+#define SLAB_MIN_CACHE_PAGES 8
+#define SLAB_MIN_CACHE_OBJECTS 8
+
+// Recomended to PENGUIN_MALLOC_MIN_SLAB_SIZE * 2**PENGUIN_MALLOC_SLABS == PAGE_SIZE
+#define PENGUIN_MALLOC_SLABS 8
+#define PENGUIN_MALLOC_MIN_SLAB_SIZE 16
+
+#endif // #ifndef BUILDCONFIG_H
+
