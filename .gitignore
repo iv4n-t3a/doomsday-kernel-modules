@@ -8,5 +8,7 @@
 **/__pycache__/
 **/venv/
 **/build/
+**/.cache/
+**/compile_commands.json
 
 neuro-swap/utest
